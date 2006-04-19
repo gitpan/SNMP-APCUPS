@@ -1,0 +1,35 @@
+#!/usr/bin/perl
+use warnings qw( all );
+use strict;
+use SNMP::APCUPS;
+
+die "usage: $0 <host> [community]\n" unless (@ARGV > 0);
+
+my $host = $ARGV[0];
+my $comm = 'public';
+$comm = $ARGV[1] if defined $ARGV[1];
+
+my $ups = new SNMP::APCUPS( { addr => $host, community => $comm } );
+
+$ups->query;
+
+die ($ups->errstr . "\n") if $ups->error;
+
+my $status_hashref = $ups->status;
+
+print "UPS Address:\t" . $ups->addr . "\n";
+print "UPS Runtime:\t" . $ups->runtime . " seconds\n";
+print "UPS Serial:\t" . $ups->serial . "\n";
+print "UPS Battery:\t" . sprintf("%3.0f",$ups->charge*100) . "%\n";
+print "UPS Load:\t" . sprintf("%3.0f",$ups->load*100) . "%\n";
+print "UPS Model:\t" . $ups->model . "\n";
+print "UPS Name:\t" . $ups->name . "\n";
+print "UPS Birthday:\t" . $ups->birthday . "\n";
+print "UPS Temp:\t" . $ups->temperature . "C\n";
+
+print "UPS " . ( $ups->needsnewbatt ? "does" : "does not" );
+print " need battery replacement.\n";
+
+print "UPS is presently running on ";
+print ( $ups->onbattery ? 'battery' : 'input');
+print " power.\n";
