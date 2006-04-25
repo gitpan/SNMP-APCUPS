@@ -12,7 +12,10 @@ WriteMakefile(
         'Test::More'	=> 0,
 	'DateTime'	=> 0,
 	'SNMP'		=> 0,
-    },
+	'Net::Ping'	=> 0,
+	'Socket'	=> 0,
+
+	},
     EXE_FILES		=> [ 'qapcups' ],
 		   
     dist                => { COMPRESS => 'gzip -9f', SUFFIX => 'gz', },

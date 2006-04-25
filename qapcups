@@ -9,7 +9,7 @@ my $host = $ARGV[0];
 my $comm = 'public';
 $comm = $ARGV[1] if defined $ARGV[1];
 
-my $ups = new SNMP::APCUPS( { addr => $host, community => $comm } );
+my $ups = new SNMP::APCUPS( { hostname => $host, community => $comm } );
 
 $ups->query;
 
@@ -17,7 +17,7 @@ die ($ups->errstr . "\n") if $ups->error;
 
 my $status_hashref = $ups->status;
 
-print "UPS Address:\t" . $ups->addr . "\n";
+print "UPS Address:\t" . $ups->hostname . "\n";
 print "UPS Runtime:\t" . $ups->runtime . " seconds\n";
 print "UPS Serial:\t" . $ups->serial . "\n";
 print "UPS Battery:\t" . sprintf("%3.0f",$ups->charge*100) . "%\n";

@@ -1,28 +1,38 @@
 package SNMP::APCUPS;
 use SNMP;
 use DateTime;
+use Socket;
+use Net::Ping;
 use warnings qw( all );
 use strict;
+
 
 =head1 NAME
 
 SNMP::APCUPS - Object Oriented Interface to American Power Conversions UPS SNMP Management Cards
 
+=cut 
+
+our $VERSION = '0.02';
+
 =head1 VERSION
 
-Version 0.01
+Version 0.02
 
 =cut
 
-our $VERSION = '0.01';
-
 =head1 REQUIRES
 
-This module requires the SNMP module and the DateTime module.
+This module requires the following modules:
+ - SNMP
+ - DateTime
+ - Socket
+ - Net::Ping
 
 Additionally, the APC PowerNet MIB is required.
 
-ftp://ftp.apcc.com/apc/public/software/pnetmib/mib/381/powernet381.mib
+ ftp://ftp.apcc.com/apc/public/software	\
+   /pnetmib/mib/381/powernet381.mib
 
 =head1 SYNOPSIS
 
@@ -30,15 +40,17 @@ Example:
 
 	use SNMP::APCUPS;
 	
-	my $ups = new SNMP::APCUPS( { addr => '10.0.0.5' } );
+	my $ups = new SNMP::APCUPS( { hostname => '10.0.0.5' } );
 
+	die $ups->errstr if $ups->error;
+	
 	$ups->query;
 	
 	die $ups->errstr if $ups->error;
-
+	
 	my $status_hashref = $ups->status;
 
-	print "UPS Address:\t" . $ups->addr . "\n";
+	print "UPS Address:\t" . $ups->hostname . "\n";
 	print "UPS Runtime:\t" . $ups->runtime . " seconds\n";
 	print "UPS Serial:\t" . $ups->serial . "\n";
 	print "UPS Battery:\t" . sprintf("%3.0f",$ups->charge*100) . "%\n";
@@ -112,17 +124,16 @@ L<http://www.encyclopediadramatica.com/index.php/BPL>
 
 =cut
 
-
 sub new {
 	my ($class,$args) = @_;
 	my $self = {
-		addr 		=> 	(
-						defined($args->{'addr'}) ?
-						$args->{'addr'} :
+		hostname 	=> 	(
+						defined($args->{'hostname'}) ?
+						$args->{'hostname'} :
 						undef
 					),
+		ip		=>	undef,
 		class		=>	$class,
-		devicetype	=>	'ups',
 		error		=>	0,
 		errorstr	=>	'',
 		community 	=> 	(
@@ -155,13 +166,38 @@ sub errstr {
 
 sub _check {
 	my $self = shift;
-	return $self->_rerror("Please specify a UPS address or hostname.")
-		unless $self->{'addr'};
+	return $self->_rerror("No UPS hostname specified.")
+		unless $self->{'hostname'};
+	$self->_resolve unless $self->error;
+	#$self->_ping unless $self->error;
 }
+
+sub _resolve {
+	my $self = shift;
+	my $tmp = undef;
+	$tmp = inet_aton($self->{'hostname'});
+	if($tmp) {
+		$self->{'ip'} = inet_ntoa($tmp);
+	}
+	$self->_rerror("Can't resolve: " . $self->{'hostname'})
+		unless $self->{'ip'};
+}
+
+sub _ping {
+	my $self = shift;
+	my $p = Net::Ping->new("icmp");
+	unless($p->ping($self->{'ip'},1)) {
+		$self->_rerror(
+			$self->{'hostname'} .
+			" (" . $self->{'ip'} .
+			") not reachable."
+		);
+	}
+}
+
 
 sub query {
 	my $self = shift;
-	$self->_check();
 	$self->_qups();
 	return if $self->error();
 	$self->{'lastquery'} = DateTime->now();
@@ -177,7 +213,7 @@ sub _rerror {
 }
 
 sub _decodetable {
-	my $self = shift;
+	# not a method!
 	my $table = {
 		'upsBasicOutputStatus'		=>	{
 			1	=> 'unknown',
@@ -221,7 +257,7 @@ sub _decodetable {
 
 sub _parseresult {
 	my $self = shift;
-	my $t = $self->_decodetable();
+	my $t = _decodetable();
 	my @oids = keys(%{$t});
 	
 	#copy!
@@ -248,6 +284,7 @@ sub _parseresult {
 }
 
 sub _dconvert_mmddyy_to_dt {
+	# not a method!
 	my $mmddyy = shift;
 	
 	my @p = split(/\//,$mmddyy);
@@ -262,10 +299,10 @@ sub _dconvert_mmddyy_to_dt {
 	);
 	return $dt;
 }
-	
-	
+
 sub _qups {
 	my $self = shift;
+	return if $self->error();
 	# get from
 	# ftp://ftp.apcc.com/apc/public/software \
 	# /pnetmib/mib/381/powernet381.mib
@@ -279,7 +316,7 @@ sub _qups {
 	$ENV{'MIBS'} = $mib;
 	my $sess = new SNMP::Session (
 			
-			DestHost	=> $self->{'addr'},
+			DestHost	=> $self->{'ip'},
 			Community	=> $self->{'community'},
 			Version		=> 1,
 			Timeout		=> 500000, 	#usec (.5s)
@@ -338,6 +375,12 @@ sub _qups {
 
 #convenient accessors:
 
+sub hostname {
+	my $self = shift;
+	return undef if $self->error;
+	return $self->{'hostname'};
+}
+
 sub onbattery {
 	my $self = shift;
 	$self->query unless $self->{'lastquery'};
@@ -360,12 +403,6 @@ sub status {
 	my %h = %{$self->{'status'}};
 	
 	return \%h;
-}
-
-sub addr {
-	my $self = shift;
-	return undef if $self->error;
-	return $self->{'addr'};
 }
 
 sub needsnewbatt {
